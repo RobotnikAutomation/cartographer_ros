@@ -39,6 +39,7 @@ add_message_files(
     SubmapList.msg
     SubmapTexture.msg
     TrajectoryStates.msg
+    AssetsWriterProgress.msg
 )
 
 add_service_files(

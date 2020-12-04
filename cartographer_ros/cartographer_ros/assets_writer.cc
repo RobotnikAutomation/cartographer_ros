@@ -37,6 +37,7 @@
 #include "cartographer_ros/ros_map_writing_points_processor.h"
 #include "cartographer_ros/time_conversion.h"
 #include "cartographer_ros/urdf_reader.h"
+#include "cartographer_ros_msgs/AssetsWriterProgress.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "ros/ros.h"
@@ -56,7 +57,7 @@ namespace carto = ::cartographer;
 
 std::unique_ptr<carto::io::PointsProcessorPipelineBuilder>
 CreatePipelineBuilder(
-    const std::vector<carto::mapping::proto::Trajectory>& trajectories,
+    const std::vector<carto::mapping::proto::Trajectory> &trajectories,
     const std::string file_prefix) {
   const auto file_writer_factory =
       AssetsWriter::CreateFileWriterFactory(file_prefix);
@@ -65,8 +66,8 @@ CreatePipelineBuilder(
                                              builder.get());
   builder->Register(RosMapWritingPointsProcessor::kConfigurationFileActionName,
                     [file_writer_factory](
-                        carto::common::LuaParameterDictionary* const dictionary,
-                        carto::io::PointsProcessor* const next)
+                        carto::common::LuaParameterDictionary *const dictionary,
+                        carto::io::PointsProcessor *const next)
                         -> std::unique_ptr<carto::io::PointsProcessor> {
                       return RosMapWritingPointsProcessor::FromDictionary(
                           file_writer_factory, dictionary, next);
@@ -74,9 +75,9 @@ CreatePipelineBuilder(
   return builder;
 }
 
-std::unique_ptr<carto::common::LuaParameterDictionary> LoadLuaDictionary(
-    const std::string& configuration_directory,
-    const std::string& configuration_basename) {
+std::unique_ptr<carto::common::LuaParameterDictionary>
+LoadLuaDictionary(const std::string &configuration_directory,
+                  const std::string &configuration_basename) {
   auto file_resolver =
       absl::make_unique<carto::common::ConfigurationFileResolver>(
           std::vector<std::string>{configuration_directory});
@@ -90,11 +91,11 @@ std::unique_ptr<carto::common::LuaParameterDictionary> LoadLuaDictionary(
 }
 
 template <typename T>
-std::unique_ptr<carto::io::PointsBatch> HandleMessage(
-    const T& message, const std::string& tracking_frame,
-    const tf2_ros::Buffer& tf_buffer,
-    const carto::transform::TransformInterpolationBuffer&
-        transform_interpolation_buffer) {
+std::unique_ptr<carto::io::PointsBatch>
+HandleMessage(const T &message, const std::string &tracking_frame,
+              const tf2_ros::Buffer &tf_buffer,
+              const carto::transform::TransformInterpolationBuffer
+                  &transform_interpolation_buffer) {
   const carto::common::Time start_time = FromRos(message.header.stamp);
 
   auto points_batch = absl::make_unique<carto::io::PointsBatch>();
@@ -134,11 +135,11 @@ std::unique_ptr<carto::io::PointsBatch> HandleMessage(
   return points_batch;
 }
 
-}  // namespace
+} // namespace
 
-AssetsWriter::AssetsWriter(const std::string& pose_graph_filename,
-                           const std::vector<std::string>& bag_filenames,
-                           const std::string& output_file_prefix)
+AssetsWriter::AssetsWriter(const std::string &pose_graph_filename,
+                           const std::vector<std::string> &bag_filenames,
+                           const std::string &output_file_prefix)
     : bag_filenames_(bag_filenames),
       pose_graph_(
           carto::io::DeserializePoseGraphFromFile(pose_graph_filename)) {
@@ -148,6 +149,10 @@ AssetsWriter::AssetsWriter(const std::string& pose_graph_filename,
       << " bags were provided. This tool requires one bag for each "
          "trajectory in the same order as the correponding trajectories in the "
          "pose graph proto.";
+
+  remaining_time_publisher_ =
+      node_handle_.advertise<::cartographer_ros_msgs::AssetsWriterProgress>(
+          "assets_writer_progress", 1);
 
   // This vector must outlive the pipeline.
   all_trajectories_ = std::vector<::cartographer::mapping::proto::Trajectory>(
@@ -161,14 +166,14 @@ AssetsWriter::AssetsWriter(const std::string& pose_graph_filename,
 }
 
 void AssetsWriter::RegisterPointsProcessor(
-    const std::string& name,
+    const std::string &name,
     cartographer::io::PointsProcessorPipelineBuilder::FactoryFunction factory) {
   point_pipeline_builder_->Register(name, factory);
 }
 
-void AssetsWriter::Run(const std::string& configuration_directory,
-                       const std::string& configuration_basename,
-                       const std::string& urdf_filename,
+void AssetsWriter::Run(const std::string &configuration_directory,
+                       const std::string &configuration_basename,
+                       const std::string &urdf_filename,
                        const bool use_bag_transforms) {
   const auto lua_parameter_dictionary =
       LoadLuaDictionary(configuration_directory, configuration_basename);
@@ -182,9 +187,9 @@ void AssetsWriter::Run(const std::string& configuration_directory,
   do {
     for (size_t trajectory_id = 0; trajectory_id < bag_filenames_.size();
          ++trajectory_id) {
-      const carto::mapping::proto::Trajectory& trajectory_proto =
+      const carto::mapping::proto::Trajectory &trajectory_proto =
           pose_graph_.trajectory(trajectory_id);
-      const std::string& bag_filename = bag_filenames_[trajectory_id];
+      const std::string &bag_filename = bag_filenames_[trajectory_id];
       LOG(INFO) << "Processing " << bag_filename << "...";
       if (trajectory_proto.node_size() == 0) {
         continue;
@@ -211,22 +216,23 @@ void AssetsWriter::Run(const std::string& configuration_directory,
       // the assumption of higher frequency tf this should ensure that tf can
       // always interpolate.
       const ::ros::Duration kDelay(1.);
-      for (const rosbag::MessageInstance& message : view) {
+      for (const rosbag::MessageInstance &message : view) {
         if (use_bag_transforms && message.isType<tf2_msgs::TFMessage>()) {
           auto tf_message = message.instantiate<tf2_msgs::TFMessage>();
-          for (const auto& transform : tf_message->transforms) {
+          for (const auto &transform : tf_message->transforms) {
             try {
               tf_buffer.setTransform(transform, "unused_authority",
                                      message.getTopic() == kTfStaticTopic);
-            } catch (const tf2::TransformException& ex) {
+            } catch (const tf2::TransformException &ex) {
               LOG(WARNING) << ex.what();
             }
           }
         }
 
-        while (!delayed_messages.empty() && delayed_messages.front().getTime() <
-                                                message.getTime() - kDelay) {
-          const rosbag::MessageInstance& delayed_message =
+        while (!delayed_messages.empty() &&
+               delayed_messages.front().getTime() <
+                   message.getTime() - kDelay) {
+          const rosbag::MessageInstance &delayed_message =
               delayed_messages.front();
 
           std::unique_ptr<carto::io::PointsBatch> points_batch;
@@ -251,6 +257,10 @@ void AssetsWriter::Run(const std::string& configuration_directory,
           delayed_messages.pop_front();
         }
         delayed_messages.push_back(message);
+        cartographer_ros_msgs::AssetsWriterProgress assets_writer_progress_msg;
+        assets_writer_progress_msg.progress =
+            message.getTime().toSec() / begin_time.toSec();
+        remaining_time_publisher_.publish(assets_writer_progress_msg);
         LOG_EVERY_N(INFO, 10000)
             << "Processed " << (message.getTime() - begin_time).toSec()
             << " of " << duration_in_seconds << " bag time seconds...";
@@ -261,12 +271,12 @@ void AssetsWriter::Run(const std::string& configuration_directory,
            carto::io::PointsProcessor::FlushResult::kRestartStream);
 }
 
-::cartographer::io::FileWriterFactory AssetsWriter::CreateFileWriterFactory(
-    const std::string& file_path) {
-  const auto file_writer_factory = [file_path](const std::string& filename) {
+::cartographer::io::FileWriterFactory
+AssetsWriter::CreateFileWriterFactory(const std::string &file_path) {
+  const auto file_writer_factory = [file_path](const std::string &filename) {
     return absl::make_unique<carto::io::StreamFileWriter>(file_path + filename);
   };
   return file_writer_factory;
 }
 
-}  // namespace cartographer_ros
+} // namespace cartographer_ros
