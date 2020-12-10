@@ -259,7 +259,7 @@ void AssetsWriter::Run(const std::string &configuration_directory,
         delayed_messages.push_back(message);
         cartographer_ros_msgs::AssetsWriterProgress assets_writer_progress_msg;
         assets_writer_progress_msg.progress =
-            message.getTime().toSec() / begin_time.toSec();
+            (message.getTime().toSec() - begin_time.toSec()) / duration_in_seconds;
         remaining_time_publisher_.publish(assets_writer_progress_msg);
         LOG_EVERY_N(INFO, 10000)
             << "Processed " << (message.getTime() - begin_time).toSec()
@@ -280,3 +280,4 @@ AssetsWriter::CreateFileWriterFactory(const std::string &file_path) {
 }
 
 } // namespace cartographer_ros
+
