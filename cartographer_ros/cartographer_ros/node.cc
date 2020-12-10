@@ -250,6 +250,9 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
                            trajectory_data.local_slam_data->local_pose);
     }
 
+    ros::Duration transform_tolerance_;
+    transform_tolerance_.fromSec(0.2);
+
     geometry_msgs::TransformStamped stamped_transform;
     // If we do not publish a new point cloud, we still allow time of the
     // published poses to advance. If we already know a newer pose, we use its
@@ -260,7 +263,7 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
     stamped_transform.header.stamp =
         node_options_.use_pose_extrapolator
             ? ToRos(now)
-            : ToRos(trajectory_data.local_slam_data->time);
+            : ToRos(trajectory_data.local_slam_data->time) + transform_tolerance_;
 
     // Suppress publishing if we already published a transform at this time.
     // Due to 2020-07 changes to geometry2, tf buffer will issue warnings for
@@ -313,6 +316,12 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
               trajectory_data.trajectory_options.published_frame;
           stamped_transform.transform = ToGeometryMsgTransform(
               tracking_to_map * (*trajectory_data.published_to_tracking));
+
+          ros::Duration transform_tolerance_;
+          transform_tolerance_.fromSec(0.2);
+
+          stamped_transform.header.stamp += transform_tolerance_;
+
           tf_broadcaster_.sendTransform(stamped_transform);
         }
       }
