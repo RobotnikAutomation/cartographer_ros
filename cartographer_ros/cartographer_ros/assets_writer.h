@@ -56,6 +56,8 @@ private:
   ::ros::NodeHandle node_handle_;
   ::ros::Publisher remaining_time_publisher_;
 
+  ros::Time last_published_time_;
+
   std::vector<std::string> bag_filenames_;
   std::vector<::cartographer::mapping::proto::Trajectory> all_trajectories_;
   ::cartographer::mapping::proto::PoseGraph pose_graph_;

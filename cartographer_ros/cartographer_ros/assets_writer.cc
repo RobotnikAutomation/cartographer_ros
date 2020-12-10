@@ -154,6 +154,8 @@ AssetsWriter::AssetsWriter(const std::string &pose_graph_filename,
       node_handle_.advertise<::cartographer_ros_msgs::AssetsWriterProgress>(
           "assets_writer_progress", 1);
 
+  last_published_time_ = ros::Time::now();
+
   // This vector must outlive the pipeline.
   all_trajectories_ = std::vector<::cartographer::mapping::proto::Trajectory>(
       pose_graph_.trajectory().begin(), pose_graph_.trajectory().end());
@@ -257,10 +259,17 @@ void AssetsWriter::Run(const std::string &configuration_directory,
           delayed_messages.pop_front();
         }
         delayed_messages.push_back(message);
-        cartographer_ros_msgs::AssetsWriterProgress assets_writer_progress_msg;
-        assets_writer_progress_msg.progress =
-            (message.getTime().toSec() - begin_time.toSec()) / duration_in_seconds;
-        remaining_time_publisher_.publish(assets_writer_progress_msg);
+
+        if(ros::Time::now().toSec() - last_published_time_.toSec() > 1.0)
+        {
+          cartographer_ros_msgs::AssetsWriterProgress assets_writer_progress_msg;
+          assets_writer_progress_msg.progress =
+              (message.getTime().toSec() - begin_time.toSec()) / duration_in_seconds;
+          remaining_time_publisher_.publish(assets_writer_progress_msg);
+          last_published_time_ = ros::Time::now();
+        }
+
+
         LOG_EVERY_N(INFO, 10000)
             << "Processed " << (message.getTime() - begin_time).toSec()
             << " of " << duration_in_seconds << " bag time seconds...";
@@ -280,4 +289,3 @@ AssetsWriter::CreateFileWriterFactory(const std::string &file_path) {
 }
 
 } // namespace cartographer_ros
-
