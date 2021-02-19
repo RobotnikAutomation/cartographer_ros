@@ -119,6 +119,10 @@ Node::Node(
         node_handle_.advertise<::geometry_msgs::PoseStamped>(
             kTrackedPoseTopic, kLatestOnlyPublisherQueueSize);
   }
+  constraint_matches_publisher_ =
+      node_handle_.advertise<::std_msgs::Int32>(
+          kConstraintMatchesTopic, kLatestOnlyPublisherQueueSize);
+
   service_servers_.push_back(node_handle_.advertiseService(
       kSubmapQueryServiceName, &Node::HandleSubmapQuery, this));
   service_servers_.push_back(node_handle_.advertiseService(
@@ -155,6 +159,10 @@ Node::Node(
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(kConstraintPublishPeriodSec),
       &Node::PublishConstraintList, this));
+  wall_timers_.push_back(node_handle_.createWallTimer(
+      ::ros::WallDuration(kConstraintPublishPeriodSec),
+      &Node::PublishCostraintMatches, this));
+
 }
 
 Node::~Node() { FinishAllTrajectories(); }
@@ -359,6 +367,14 @@ void Node::PublishConstraintList(
   if (constraint_list_publisher_.getNumSubscribers() > 0) {
     absl::MutexLock lock(&mutex_);
     constraint_list_publisher_.publish(map_builder_bridge_.GetConstraintList());
+  }
+}
+
+void Node::PublishCostraintMatches(
+    const ::ros::WallTimerEvent &unused_timer_event) {
+  if (constraint_matches_publisher_.getNumSubscribers() > 0) {
+    absl::MutexLock lock(&mutex_);
+    constraint_matches_publisher_.publish(map_builder_bridge_.GetConstraintMatches());
   }
 }
 

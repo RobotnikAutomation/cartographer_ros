@@ -394,6 +394,21 @@ visualization_msgs::MarkerArray MapBuilderBridge::GetLandmarkPosesList() {
   return landmark_poses_list;
 }
 
+std_msgs::Int32 MapBuilderBridge::GetConstraintMatches() {
+  std_msgs::Int32 constraint_matches;
+
+  const auto constraints = map_builder_->pose_graph()->constraints();
+  for (const auto& constraint : constraints) {
+    if (constraint.tag != cartographer::mapping::PoseGraphInterface::Constraint::INTRA_SUBMAP) {
+      if(constraint.node_id.trajectory_id != constraint.submap_id.trajectory_id) {
+        constraint_matches.data++;
+      }
+    }
+  }
+
+  return constraint_matches;
+}
+
 visualization_msgs::MarkerArray MapBuilderBridge::GetConstraintList() {
   visualization_msgs::MarkerArray constraint_list;
   int marker_id = 0;
