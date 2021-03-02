@@ -96,13 +96,18 @@ Node::Node(
     std::unique_ptr<cartographer::mapping::MapBuilderInterface> map_builder,
     tf2_ros::Buffer *const tf_buffer, const bool collect_metrics)
     : node_options_(node_options),
-      map_builder_bridge_(node_options_, std::move(map_builder), tf_buffer) {
+      map_builder_bridge_(node_options_, std::move(map_builder), tf_buffer),
+      private_node_handle_("~") {
   absl::MutexLock lock(&mutex_);
   if (collect_metrics) {
     metrics_registry_ = absl::make_unique<metrics::FamilyFactory>();
     carto::metrics::RegisterAllMetrics(metrics_registry_.get());
   }
 
+  // READ params
+  two_d_mode_ = false;
+  private_node_handle_.param<bool>("two_d_mode", two_d_mode_, two_d_mode_);
+  
   submap_list_publisher_ =
       node_handle_.advertise<::cartographer_ros_msgs::SubmapList>(
           kSubmapListTopic, kLatestOnlyPublisherQueueSize);
@@ -314,6 +319,11 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
               trajectory_data.trajectory_options.published_frame;
           stamped_transform.transform = ToGeometryMsgTransform(
               tracking_to_local * (*trajectory_data.published_to_tracking));
+          
+          // two_d_mode
+          if(two_d_mode_ == true)
+			stamped_transform.transform.translation.z = 0;
+          
           stamped_transforms.push_back(stamped_transform);
 
           tf_broadcaster_.sendTransform(stamped_transforms);
@@ -328,6 +338,9 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
           transform_tolerance_.fromSec(0.2);
 
           stamped_transform.header.stamp += transform_tolerance_;
+          // two_d_mode
+          if(two_d_mode_ == true)
+			stamped_transform.transform.translation.z = 0;
 
           tf_broadcaster_.sendTransform(stamped_transform);
         }

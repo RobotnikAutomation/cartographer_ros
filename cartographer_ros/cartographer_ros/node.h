@@ -183,7 +183,7 @@ class Node {
   std::unique_ptr<cartographer_ros::metrics::FamilyFactory> metrics_registry_;
   MapBuilderBridge map_builder_bridge_ GUARDED_BY(mutex_);
 
-  ::ros::NodeHandle node_handle_;
+  ::ros::NodeHandle node_handle_, private_node_handle_;
   ::ros::Publisher submap_list_publisher_;
   ::ros::Publisher trajectory_node_list_publisher_;
   ::ros::Publisher landmark_poses_list_publisher_;
@@ -231,6 +231,9 @@ class Node {
   // simulation time is standing still. This prevents overflowing the transform
   // listener buffer by publishing the same transforms over and over again.
   ::ros::Timer publish_local_trajectory_data_timer_;
+  
+  // Flag to publish the tf in two dimensions
+  bool two_d_mode_;
 };
 
 }  // namespace cartographer_ros
