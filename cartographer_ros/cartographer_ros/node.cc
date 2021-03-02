@@ -41,6 +41,7 @@
 #include "cartographer_ros_msgs/StatusCode.h"
 #include "cartographer_ros_msgs/StatusResponse.h"
 #include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "glog/logging.h"
 #include "nav_msgs/Odometry.h"
 #include "ros/serialization.h"
@@ -95,13 +96,18 @@ Node::Node(
     std::unique_ptr<cartographer::mapping::MapBuilderInterface> map_builder,
     tf2_ros::Buffer *const tf_buffer, const bool collect_metrics)
     : node_options_(node_options),
-      map_builder_bridge_(node_options_, std::move(map_builder), tf_buffer) {
+      map_builder_bridge_(node_options_, std::move(map_builder), tf_buffer),
+      private_node_handle_("~") {
   absl::MutexLock lock(&mutex_);
   if (collect_metrics) {
     metrics_registry_ = absl::make_unique<metrics::FamilyFactory>();
     carto::metrics::RegisterAllMetrics(metrics_registry_.get());
   }
 
+  // READ params
+  two_d_mode_ = false;
+  private_node_handle_.param<bool>("two_d_mode", two_d_mode_, two_d_mode_);
+  
   submap_list_publisher_ =
       node_handle_.advertise<::cartographer_ros_msgs::SubmapList>(
           kSubmapListTopic, kLatestOnlyPublisherQueueSize);
@@ -118,6 +124,12 @@ Node::Node(
     tracked_pose_publisher_ =
         node_handle_.advertise<::geometry_msgs::PoseStamped>(
             kTrackedPoseTopic, kLatestOnlyPublisherQueueSize);
+    tracked_pose_with_cov_publisher_ =
+        node_handle_.advertise<::geometry_msgs::PoseWithCovarianceStamped>(
+            "tracked_pose_with_covariance", kLatestOnlyPublisherQueueSize);
+    tracked_pose_odometry_publisher_ =
+        node_handle_.advertise<::nav_msgs::Odometry>(
+            "tracked_pose_odometry", kLatestOnlyPublisherQueueSize);
   }
   constraint_matches_publisher_ =
       node_handle_.advertise<::std_msgs::Int32>(
@@ -315,6 +327,11 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
               trajectory_data.trajectory_options.published_frame;
           stamped_transform.transform = ToGeometryMsgTransform(
               tracking_to_local * (*trajectory_data.published_to_tracking));
+          
+          // two_d_mode
+          if(two_d_mode_ == true)
+			stamped_transform.transform.translation.z = 0;
+          
           stamped_transforms.push_back(stamped_transform);
 
           tf_broadcaster_.sendTransform(stamped_transforms);
@@ -329,6 +346,9 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
           transform_tolerance_.fromSec(0.2);
 
           stamped_transform.header.stamp += transform_tolerance_;
+          // two_d_mode
+          if(two_d_mode_ == true)
+			stamped_transform.transform.translation.z = 0;
 
           tf_broadcaster_.sendTransform(stamped_transform);
         }
@@ -339,6 +359,40 @@ void Node::PublishLocalTrajectoryData(const ::ros::TimerEvent &timer_event) {
         pose_msg.header.stamp = stamped_transform.header.stamp;
         pose_msg.pose = ToGeometryMsgPose(tracking_to_map);
         tracked_pose_publisher_.publish(pose_msg);
+        
+        ::geometry_msgs::PoseWithCovarianceStamped pose_cov_msg;
+        pose_cov_msg.header.frame_id = node_options_.map_frame;
+		pose_cov_msg.header.stamp = stamped_transform.header.stamp;
+		pose_cov_msg.pose.pose = pose_msg.pose;
+		/*pose_cov_msg.pose.covariance = {
+									0.001, 0.,    0.,  0.,  0.,  0.,
+									0.,    0.001, 0.,  0.,  0.,  0.,
+									0.,    0.,    0.1, 0.,  0.,  0.,
+									0.,    0.,    0.,  0.1, 0.,  0.,
+									0.,    0.,    0.,  0.,  0.1, 0.,
+									0.,    0.,    0.,  0.,  0.,  0.001
+									};*/
+		pose_cov_msg.pose.covariance[0]=0.001;
+		pose_cov_msg.pose.covariance[7]=0.001;
+		pose_cov_msg.pose.covariance[15]=0.1;
+		pose_cov_msg.pose.covariance[22]=0.1;
+		pose_cov_msg.pose.covariance[29]=0.1;
+		pose_cov_msg.pose.covariance[35]=0.001;
+		tracked_pose_with_cov_publisher_.publish(pose_cov_msg);
+		
+		::nav_msgs::Odometry odom_msg;
+		odom_msg.header.frame_id = node_options_.map_frame;
+		odom_msg.header.stamp = stamped_transform.header.stamp;
+		odom_msg.child_frame_id = "robot_imu_link";
+		odom_msg.pose.pose = pose_msg.pose;
+		odom_msg.pose.covariance[0]=0.001;
+		odom_msg.pose.covariance[7]=0.001;
+		odom_msg.pose.covariance[15]=0.1;
+		odom_msg.pose.covariance[22]=0.1;
+		odom_msg.pose.covariance[29]=0.1;
+		odom_msg.pose.covariance[35]=0.001;
+		
+		tracked_pose_odometry_publisher_.publish(odom_msg);
       }
     }
   }
